@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: producer
+  namespace: app
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: consumer
+  namespace: app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: producer
+  namespace: app
+spec:
+  selector:
+    app: producer
+  type: ClusterIP
+  ports:
+  - name: producer
+    protocol: TCP
+    port: 8080
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: producer
+  namespace: app
+  labels:
+    app: producer
+spec:
+  selector:
+    matchLabels:
+      app: producer
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: producer
+    spec:
+      containers:
+      - name: producer
+        image: worker-mesh:0.0.0
+        command: ["/producer"]
+        volumeMounts:
+        - name: config
+          mountPath: /config.yaml
+          subPath: config.yaml
+        ports:
+        - containerPort: 8080
+          name: http
+        resources:
+          requests:
+            memory: 75Mi
+          limits:
+            memory: 100Mi
+      volumes:
+      - name: config
+        configMap:
+          name: producer-config
+      restartPolicy: Always
+      serviceAccountName: producer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consumer
+  namespace: app
+spec:
+  selector:
+    app: consumer
+  type: ClusterIP
+  ports:
+  - name: consumer
+    protocol: TCP
+    port: 80
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer
+  namespace: app
+  labels:
+    app: consumer
+spec:
+  selector:
+    matchLabels:
+      app: consumer
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: consumer
+    spec:
+      containers:
+      - name: consumer
+        image: worker-mesh:0.0.0
+        command: ["/consumer"]
+        volumeMounts:
+        - name: config
+          mountPath: /config.yaml
+          subPath: config.yaml
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: 75Mi
+          limits:
+            memory: 100Mi
+      volumes:
+      - name: config
+        configMap:
+          name: consumer-config
+      restartPolicy: Always
+      serviceAccountName: consumer
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: producer-config
+  namespace: app
+data:
+  config.yaml: |
+    port: 8080
+    nsq:
+      host: nsq-nsqd.nsq
+      port: 4150
+      topic: notification
+      channel: high
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: consumer-config
+  namespace: app
+data:
+  config.yaml: |
+    nsq:
+      topic: notification
+      channel: high
+      lookupd:
+        host: nsq-nsqlookupd.nsq
+        port: 4161
+---

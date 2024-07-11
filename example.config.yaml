@@ -1,0 +1,9 @@
+port: 8080
+nsq:
+  host: nsqd
+  port: 4150
+  topic: notification
+  channel: urgent
+  lookupd:
+    host: lookupd
+    port: 4161
